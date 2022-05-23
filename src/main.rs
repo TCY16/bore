@@ -12,6 +12,8 @@ use domain::base::{
 };
 use domain::rdata::AllRecordData;
 
+
+
 fn main() {
 	let mut qname: String = "".to_string();
 	let mut server: String = "127.0.0.1".to_string();
