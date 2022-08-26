@@ -27,17 +27,17 @@ impl Request {
                 .about("A Rusty cousin to drill")
                 .author("NLnet Labs")
                 .args(&[
-                        Arg::new("server")
-                                .help("The server that is query is sent to")
-                                .short('s')
-                                .long("server")
-                                .takes_value(true),
-                        Arg::new("port")
-                                .help("The port of the server that is query is sent to")
-                                .short('p')
-                                .long("port")
-                                .takes_value(true),
-                        Arg::new("qname")
+                    Arg::new("server")
+                        .help("The server that is query is sent to")
+                        .short('s')
+                        .long("server")
+                        .takes_value(true),
+                    Arg::new("port")
+                        .help("The port of the server that is query is sent to")
+                        .short('p')
+                        .long("port")
+                        .takes_value(true),
+                    Arg::new("qname")
                 ]).get_matches();
 
         // @TODO clean this up -> Arg.validator()
@@ -45,9 +45,9 @@ impl Request {
         let port = args.value_of("port").and_then(|port| u16::from_str(port).ok()).unwrap_or(53);
 
         if args.is_present("server") {
-                server = args.value_of("server").unwrap()
-                        .parse()
-                        .expect("Unable to parse server IP address");
+            server = args.value_of("server").unwrap()
+                .parse()
+                .expect("Unable to parse server IP address");
         }
         
         let qname = match args.value_of("qname") {
@@ -111,11 +111,11 @@ impl Request {
 
         // Add an OPT record.
         msg.opt(|opt| {
-                opt.set_udp_payload_size(4096);
-                opt.push_raw_option(OptionCode::Nsid, |target| {
-                                target.append_slice(b" ")
-                        })?;
-                Ok(())
+            opt.set_udp_payload_size(4096);
+            opt.push_raw_option(OptionCode::Nsid, |target| {
+                            target.append_slice(b" ")
+                    })?;
+            Ok(())
         }).unwrap();
 
         // Convert the builder into the actual message.
@@ -133,7 +133,7 @@ impl Request {
 
         let count = response.header_counts();
         println!(" ; QUERY: {}, ANSWER: {}, AUTHORITY: {}, ADDITIONAL: {}",
-                count.qdcount(), count.ancount(), count.nscount(), count.arcount());
+            count.qdcount(), count.ancount(), count.nscount(), count.arcount());
 
         /* Question */
         println!(";; QUESTION SECTION:");
@@ -141,7 +141,7 @@ impl Request {
         let question_section = response.question();
 
         for question in question_section {
-                println!(";; {}", question.unwrap());
+            println!(";; {}", question.unwrap());
         }
 
         /* Answer */
@@ -151,7 +151,7 @@ impl Request {
         let answer_section = response.answer().unwrap().limit_to::<AllRecordData<_, _>>();
 
         for record in answer_section {
-                println!(";; {}", record.unwrap());
+            println!(";; {}", record.unwrap());
         }
 
         /* Authority */
@@ -160,7 +160,7 @@ impl Request {
         let authority_section = response.authority().unwrap().limit_to::<AllRecordData<_, _>>();
 
         for record in authority_section {
-                println!("{}", record.unwrap());
+            println!("{}", record.unwrap());
         }
 
         /* Additional */
@@ -169,29 +169,27 @@ impl Request {
         let opt_record = response.opt().unwrap();
 
         println!(";; EDNS: version {}; flags: {}; udp: {}", // @TODO remove hardcode UDP
-                opt_record.version(), opt_record.dnssec_ok(), opt_record.udp_payload_size()); 
+            opt_record.version(), opt_record.dnssec_ok(), opt_record.udp_payload_size()); 
 
 
         for option in opt_record.iter::<AllOptData<_>>() {
-                let opt = option.unwrap();
-                match opt {
-                        AllOptData::Nsid(nsid) => println!("; NSID: {}", nsid),
-                        // @TODO Display not implemented for these OPTs
-                        // AllOptData::Dau(dau) => println!("{}", dau),
-                        // AllOptData::Dhu(dhu) => println!("{}", dhu),
-                        // AllOptData::N3u(d3u) => println!("{}", n3u),
-                        // AllOptData::Expire(expire) => println!("{}", expire),
-                        // AllOptData::TcpKeepalive(tcpkeepalive) => println!("{}", tcpkeepalive),
-                        // AllOptData::Padding(padding) => println!("{}", padding),
-                        // AllOptData::ClientSubnet(clientsubnet) => println!("{}", clientsubnet),
-                        // AllOptData::Cookie(cookie) => println!("{}", cookie),
-                        // AllOptData::Chain(chain) => println!("{}", chain),
-                        // AllOptData::KeyTag(keytag) => println!("{}", keytag), 
-                        AllOptData::ExtendedError(extendederror) => println!("; EDE: {}", extendederror),
-                        _ => println!("NO OPT!"),
-                }
-
-        
+            let opt = option.unwrap();
+            match opt {
+                AllOptData::Nsid(nsid) => println!("; NSID: {}", nsid),
+                // @TODO Display not implemented for these OPTs
+                // AllOptData::Dau(dau) => println!("{}", dau),
+                // AllOptData::Dhu(dhu) => println!("{}", dhu),
+                // AllOptData::N3u(d3u) => println!("{}", n3u),
+                // AllOptData::Expire(expire) => println!("{}", expire),
+                // AllOptData::TcpKeepalive(tcpkeepalive) => println!("{}", tcpkeepalive),
+                // AllOptData::Padding(padding) => println!("{}", padding),
+                // AllOptData::ClientSubnet(clientsubnet) => println!("{}", clientsubnet),
+                // AllOptData::Cookie(cookie) => println!("{}", cookie),
+                // AllOptData::Chain(chain) => println!("{}", chain),
+                // AllOptData::KeyTag(keytag) => println!("{}", keytag), 
+                AllOptData::ExtendedError(extendederror) => println!("; EDE: {}", extendederror),
+                _ => println!("NO OPT!"),
+            }
         }
     }
 }
