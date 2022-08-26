@@ -15,30 +15,52 @@ use domain::rdata::AllRecordData;
 struct Request {
     server: SocketAddr,
     qname: Dname<Vec<u8>>,
+<<<<<<< Updated upstream
+=======
+    qtype: Rtype,
+    do_bit: bool,
+    nsid: bool,
+>>>>>>> Stashed changes
 }
 
 impl Request {
     fn from_cmd_line() -> Result<Self, String> {
-        let mut server = IpAddr::from_str("127.0.0.1").unwrap(); // We know this fine.
+        // @TODO get resolver from the system instead of localhost
+        let mut server = IpAddr::from_str("127.0.0.1").unwrap(); // This is fine
+        let mut do_bit = false;
+        let mut nsid = false;
 
         // Get command line arguments
         let args = Command::new("bore")
-                .version("0.1")
-                .about("A Rusty cousin to drill")
-                .author("NLnet Labs")
-                .args(&[
-                    Arg::new("server")
-                        .help("The server that is query is sent to")
-                        .short('s')
-                        .long("server")
-                        .takes_value(true),
-                    Arg::new("port")
-                        .help("The port of the server that is query is sent to")
-                        .short('p')
-                        .long("port")
-                        .takes_value(true),
-                    Arg::new("qname")
-                ]).get_matches();
+            .version("0.1")
+            .about("A Rusty cousin to drill")
+            .author("NLnet Labs")
+            .args(&[
+                Arg::new("server")
+                    .help("The server that is query is sent to")
+                    .short('s')
+                    .long("server")
+                    .takes_value(true),
+                Arg::new("port")
+                    .help("The port of the server that is query is sent to")
+                    .short('p')
+                    .long("port")
+                    .takes_value(true),
+                Arg::new("qtype")
+                    .help("The query type of the request")
+                    .short('q')
+                    .long("qtype")
+                    .takes_value(true),
+                Arg::new("nsid")
+                    .help("Request the nsid")
+                    .long("nsid")
+                    .takes_value(false),
+                Arg::new("do_bit")
+                    .help("Set the DO bit to request DNSSEC records")
+                    .long("do")
+                    .takes_value(false),
+                Arg::new("qname"),
+            ]).get_matches();
 
         // @TODO clean this up -> Arg.validator()
 
@@ -49,6 +71,19 @@ impl Request {
                 .parse()
                 .expect("Unable to parse server IP address");
         }
+
+        // @TODO find prettier way of storing these EDNS configurables
+        if args.is_present("do_bit") {
+            do_bit = true;
+        }
+
+        if args.is_present("nsid") {
+            nsid = true;
+        }
+
+        let qtype = args.value_of("qtype")
+            .and_then(|qtype| Rtype::from_str(qtype).ok())
+            .unwrap_or(Rtype::A);
         
         let qname = match args.value_of("qname") {
             Some(qname) => Dname::from_str(qname).map_err(|err| err.to_string())?,
@@ -57,7 +92,10 @@ impl Request {
 
         Ok(Request {
             server: (server, port).into(),
-            qname
+            qname,
+            qtype,
+            do_bit,
+            nsid,
         })
     }
 
@@ -112,9 +150,17 @@ impl Request {
         // Add an OPT record.
         msg.opt(|opt| {
             opt.set_udp_payload_size(4096);
-            opt.push_raw_option(OptionCode::Nsid, |target| {
-                            target.append_slice(b" ")
-                    })?;
+
+            if self.nsid {
+                opt.push_raw_option(OptionCode::Nsid, |target| {
+                    target.append_slice(b" ")
+                })?;
+            }
+
+            if self.do_bit {
+                opt.set_dnssec_ok(true);
+            }
+
             Ok(())
         }).unwrap();
 
