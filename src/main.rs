@@ -15,12 +15,9 @@ use domain::rdata::AllRecordData;
 struct Request {
     server: SocketAddr,
     qname: Dname<Vec<u8>>,
-<<<<<<< Updated upstream
-=======
     qtype: Rtype,
     do_bit: bool,
     nsid: bool,
->>>>>>> Stashed changes
 }
 
 impl Request {
@@ -222,17 +219,16 @@ impl Request {
             let opt = option.unwrap();
             match opt {
                 AllOptData::Nsid(nsid) => println!("; NSID: {}", nsid),
-                // @TODO Display not implemented for these OPTs
-                // AllOptData::Dau(dau) => println!("{}", dau),
-                // AllOptData::Dhu(dhu) => println!("{}", dhu),
-                // AllOptData::N3u(d3u) => println!("{}", n3u),
-                // AllOptData::Expire(expire) => println!("{}", expire),
-                // AllOptData::TcpKeepalive(tcpkeepalive) => println!("{}", tcpkeepalive),
-                // AllOptData::Padding(padding) => println!("{}", padding),
-                // AllOptData::ClientSubnet(clientsubnet) => println!("{}", clientsubnet),
-                // AllOptData::Cookie(cookie) => println!("{}", cookie),
-                // AllOptData::Chain(chain) => println!("{}", chain),
-                // AllOptData::KeyTag(keytag) => println!("{}", keytag), 
+                AllOptData::Dau(dau) => println!("; DAU: {}", dau),
+                AllOptData::Dhu(dhu) => println!("; DHU: {}", dhu),
+                AllOptData::N3u(n3u) => println!("; N3U: {}", n3u),
+                AllOptData::Expire(expire) => println!("; EXPIRE: {}", expire),
+                AllOptData::TcpKeepalive(tcpkeepalive) => println!("; TCPKEEPALIVE: {}", tcpkeepalive),
+                AllOptData::Padding(padding) => println!("; PADDING: {}", padding),
+                AllOptData::ClientSubnet(clientsubnet) => println!("; CLIENTSUBNET: {}", clientsubnet),
+                AllOptData::Cookie(cookie) => println!("; COOKIE: {}", cookie),
+                AllOptData::Chain(chain) => println!("; CHAIN: {}", chain),
+                AllOptData::KeyTag(keytag) => println!("; KEYTAG: {}", keytag),
                 AllOptData::ExtendedError(extendederror) => println!("; EDE: {}", extendederror),
                 _ => println!("NO OPT!"),
             }
