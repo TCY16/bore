@@ -8,6 +8,6 @@ edition = "2018"
 
 [dependencies]
 
-domain = { path = "../domain" }
+domain = { path = "../domain", features = ["resolv"] }
 #domain = {git="https://github.com/NLnetLabs/domain.git", branch="main"}
-clap = { version = "3.1.18", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }

@@ -1,109 +1,86 @@
 use std::{fmt, io, process};
-use std::str::FromStr;
 use std::net::{UdpSocket, IpAddr, SocketAddr};
-use clap::{Arg,Command};
-
+use clap::{Command, Parser};
 use domain::base::{
         Dname, MessageBuilder, Rtype, StaticCompressor, StreamTarget,
         iana::OptionCode, octets::OctetsBuilder, message::Message,
         opt::AllOptData
 };
 use domain::rdata::AllRecordData;
+use domain::resolv::stub::conf::ResolvConf;
 
 
-#[derive(Clone, Debug)]
-struct Request {
-    server: SocketAddr,
+#[derive(Clone, Debug, Parser)]
+#[command(author, version, about, long_about = None)]
+#[command(author = "Tom Carpay, NLnet Labs")]
+#[command(version = "0.1")]
+#[command(about = "A Rusty cousin to drill", long_about = None)]
+struct GlobalParamArgs {
+    /// The query name that is going to be resolved
+    #[arg(value_name="QUERY_NAME")]
     qname: Dname<Vec<u8>>,
+
+    /// The query type of the request
+    #[arg(long, default_value = "A")]
     qtype: Rtype,
+
+    /// The server that is query is sent to
+    #[arg(short = 's', long, value_name="IP_ADDRESS")]
+    server: Option<IpAddr>,
+
+    /// The port of the server that is query is sent to
+    #[arg(short = 'p', long = "port", value_parser = clap::value_parser!(u16))]
+    port: Option<u16>,
+
+    /// Set the DO bit to request DNSSEC records
+    #[arg(long = "do")]
     do_bit: bool,
+
+    /// Request the server NSID
+    #[arg(long = "nsid")]
     nsid: bool,
 }
 
+#[derive(Clone, Debug)]
+struct Request {
+    args: GlobalParamArgs,
+    upstream: SocketAddr,
+}
+
 impl Request {
-    fn from_cmd_line() -> Result<Self, String> {
-        // @TODO get resolver from the system instead of localhost
-        let mut server = IpAddr::from_str("127.0.0.1").unwrap(); // This is fine
-        let mut do_bit = false;
-        let mut nsid = false;
+    fn configure(args: GlobalParamArgs) -> Result<Self, String> {
+        let mut upstreams = ResolvConf::default();
 
-        // Get command line arguments
-        let args = Command::new("bore")
-            .version("0.1")
-            .about("A Rusty cousin to drill")
-            .author("NLnet Labs")
-            .args(&[
-                Arg::new("server")
-                    .help("The server that is query is sent to")
-                    .short('s')
-                    .long("server")
-                    .takes_value(true),
-                Arg::new("port")
-                    .help("The port of the server that is query is sent to")
-                    .short('p')
-                    .long("port")
-                    .takes_value(true),
-                Arg::new("qtype")
-                    .help("The query type of the request")
-                    .short('q')
-                    .long("qtype")
-                    .takes_value(true),
-                Arg::new("nsid")
-                    .help("Request the nsid")
-                    .long("nsid")
-                    .takes_value(false),
-                Arg::new("do_bit")
-                    .help("Set the DO bit to request DNSSEC records")
-                    .long("do")
-                    .takes_value(false),
-                Arg::new("qname"),
-            ]).get_matches();
-
-        // @TODO clean this up -> Arg.validator()
-
-        let port = args.value_of("port").and_then(|port| u16::from_str(port).ok()).unwrap_or(53);
-
-        if args.is_present("server") {
-            server = args.value_of("server").unwrap()
-                .parse()
-                .expect("Unable to parse server IP address");
-        }
-
-        // @TODO find prettier way of storing these EDNS configurables
-        if args.is_present("do_bit") {
-            do_bit = true;
-        }
-
-        if args.is_present("nsid") {
-            nsid = true;
-        }
-
-        let qtype = args.value_of("qtype")
-            .and_then(|qtype| Rtype::from_str(qtype).ok())
-            .unwrap_or(Rtype::A);
-        
-        let qname = match args.value_of("qname") {
-            Some(qname) => Dname::from_str(qname).map_err(|err| err.to_string())?,
-            None => Dname::root_vec(),
+        let upstream: SocketAddr = match (args.server, args.port) {
+            (Some(addr), Some(port)) => SocketAddr::new(addr, port),
+            (Some(addr), None) => SocketAddr::new(addr, 0),
+            (None, Some(port)) => {
+                upstreams.servers[0].addr.set_port(port);
+                upstreams.servers[0].addr
+            },
+            (None, None) => upstreams.servers[0].addr,
         };
 
+        // @TODO choose between v4 and v6 for upstream
+
         Ok(Request {
-            server: (server, port).into(),
-            qname,
-            qtype,
-            do_bit,
-            nsid,
+            args: args.clone(), // @TODO find better way?
+            upstream,
         })
     }
 
     fn process(self) -> Result<(), BoreError> {
         // Bind a UDP socket to a kernel-provided port
-        let socket = UdpSocket::bind("0.0.0.0:0").expect("couldn't bind to address");
+        let socket = match self.upstream {
+            SocketAddr::V4(_) => UdpSocket::bind("0.0.0.0:0").expect("couldn't bind to address"),
+            SocketAddr::V6(_) => UdpSocket::bind("[::]:0").expect("couldn't bind to address"),
+        };
 
         let message = self.create_message()?;
 
         // Send message off to the server using our socket
-        socket.send_to(&message.as_dgram_slice(), self.server)?;
+        // @TODO this is a temp solution
+        socket.send_to(&message.as_dgram_slice(), self.upstream)?;
 
         // Create recv buffer
         let mut buffer = vec![0; 1232];
@@ -116,7 +93,7 @@ impl Request {
         self.print_response(response);
 
         /* Print message information */
-        // println!(":: SERVER: {}", &server);
+        println!(";; SERVER: {}", self.upstream);
 
         Ok(())
     }
@@ -140,21 +117,22 @@ impl Request {
         let mut msg = msg.question();
 
         // Add a question and proceed to the answer section.
-        msg.push((&self.qname, Rtype::A)).unwrap();
+        msg.push((&self.args.qname, self.args.qtype)).unwrap();
 
         let mut msg = msg.additional();
 
         // Add an OPT record.
+        // @TODO make this configurable
         msg.opt(|opt| {
             opt.set_udp_payload_size(4096);
 
-            if self.nsid {
+            if self.args.nsid {
                 opt.push_raw_option(OptionCode::Nsid, |target| {
                     target.append_slice(b" ")
                 })?;
             }
 
-            if self.do_bit {
+            if self.args.do_bit {
                 opt.set_dnssec_ok(true);
             }
 
@@ -261,15 +239,20 @@ impl fmt::Display for BoreError {
 
 
 fn main() {
-    let request = match Request::from_cmd_line() {
+    let args = GlobalParamArgs::parse();
+
+    println!("DNAME: {}", args.qname);
+
+    let request = match Request::configure(args) {
         Ok(request) => request,
         Err(err) => {
-            println!("{}", err);
+            println!("Bore configure error: {}", err);
             process::exit(1);
         }
     };
+
     if let Err(err) = request.process() {
-        println!("{}", err);
+        println!("Bore process error: {}", err);
         process::exit(1);
     }
 }
