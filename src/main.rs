@@ -20,7 +20,7 @@ struct GlobalParamArgs {
     #[arg(value_name="QUERY_NAME")]
     qname: Dname<Vec<u8>>,
 
-    /// The query type of the request
+    /// The query type of the request. The default is and A record.
     #[arg(long, default_value = "A")]
     qtype: Rtype,
 
@@ -32,13 +32,25 @@ struct GlobalParamArgs {
     #[arg(short = 'p', long = "port", value_parser = clap::value_parser!(u16))]
     port: Option<u16>,
 
-    /// Set the DO bit to request DNSSEC records
+    /// Request no recursion on the DNS message. This is true by default.
+    #[arg(long = "norecurse")]
+    no_rd_bit: bool,
+
+    /// Set the DO bit to request DNSSEC records. The default is false.
     #[arg(long = "do")]
     do_bit: bool,
 
-    /// Request the server NSID
+    /// Request the server NSID. The default is false.
     #[arg(long = "nsid")]
     nsid: bool,
+
+    /// Use only IPv4 for communication. The default is false.
+    #[arg(short = '4', long = "do_ipv4")]
+    do_ipv4: bool,
+
+    /// Use only IPv4 for communication. The default is false.
+    #[arg(short = '6', long = "do_ipv6")]
+    do_ipv6: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -51,17 +63,42 @@ impl Request {
     fn configure(args: GlobalParamArgs) -> Result<Self, String> {
         let mut upstreams = ResolvConf::default();
 
+        /* Specify which IP version we use */
+        let mut ip_version = 0;
+        if args.do_ipv4 && !args.do_ipv6 {
+            ip_version = 4;
+        }
+        else if !args.do_ipv4 && args.do_ipv6 {
+            ip_version = 6;
+        }
+        if args.do_ipv4 && args.do_ipv6 {
+            return Err("you cannot specify both -4 and -6".to_string());
+        }
+
+        /* Select the default upstream IP if not specified in arguments */
         let upstream: SocketAddr = match (args.server, args.port) {
             (Some(addr), Some(port)) => SocketAddr::new(addr, port),
             (Some(addr), None) => SocketAddr::new(addr, 0),
             (None, Some(port)) => {
+                // Select this upstream just to have this var non-empty
+                let mut upstream_socketaddr: SocketAddr = upstreams.servers[0].addr;
+
+                for server in &upstreams.servers {
+                    if ip_version == 4 && server.addr.is_ipv4() {
+                        upstream_socketaddr = server.addr;
+                    } else if ip_version == 6 && server.addr.is_ipv6() {
+                        upstream_socketaddr = server.addr;
+                    } else {
+                        return Err("No upstream IP found for specified IP version".to_string());
+                    }
+                }
+
                 upstreams.servers[0].addr.set_port(port);
-                upstreams.servers[0].addr
+                upstream_socketaddr
             },
             (None, None) => upstreams.servers[0].addr,
         };
 
-        // @TODO choose between v4 and v6 for upstream
 
         Ok(Request {
             args: args.clone(), // @TODO find better way?
@@ -79,7 +116,6 @@ impl Request {
         let message = self.create_message()?;
 
         // Send message off to the server using our socket
-        // @TODO this is a temp solution
         socket.send_to(&message.as_dgram_slice(), self.upstream)?;
 
         // Create recv buffer
@@ -93,7 +129,7 @@ impl Request {
         self.print_response(response);
 
         /* Print message information */
-        println!(";; SERVER: {}", self.upstream);
+        println!("\n;; SERVER: {}", self.upstream);
 
         Ok(())
     }
@@ -112,7 +148,10 @@ impl Request {
 
         // Set the RD bit and a random ID in the header and proceed to
         // the question section.
-        msg.header_mut().set_rd(true);
+        if !self.args.no_rd_bit {
+            msg.header_mut().set_rd(true);
+        }
+
         msg.header_mut().set_random_id();
         let mut msg = msg.question();
 
@@ -153,7 +192,7 @@ impl Request {
         print!(";; flags: {}", header.flags());
 
         let count = response.header_counts();
-        println!(" ; QUERY: {}, ANSWER: {}, AUTHORITY: {}, ADDITIONAL: {}",
+        println!(" ; QUERY: {}, ANSWER: {}, AUTHORITY: {}, ADDITIONAL: {}\n",
             count.qdcount(), count.ancount(), count.nscount(), count.arcount());
 
         /* Question */
@@ -162,7 +201,13 @@ impl Request {
         let question_section = response.question();
 
         for question in question_section {
-            println!(";; {}", question.unwrap());
+            println!("; {}", question.unwrap());
+        }
+
+        /* Return early if there are no more records */
+        if count.ancount() == 0 && count.nscount() == 0 && count.arcount() == 0 {
+            println!();
+            return;
         }
 
         /* Answer */
@@ -172,7 +217,13 @@ impl Request {
         let answer_section = response.answer().unwrap().limit_to::<AllRecordData<_, _>>();
 
         for record in answer_section {
-            println!(";; {}", record.unwrap());
+            println!("{}", record.unwrap());
+        }
+
+        /* Return early if there are no more records */
+        if count.nscount() == 0 && count.arcount() == 0 {
+            println!();
+            return;
         }
 
         /* Authority */
@@ -184,17 +235,31 @@ impl Request {
             println!("{}", record.unwrap());
         }
 
+        /* Return early if there are no more records */
+        if count.arcount() == 0 {
+            println!();
+            return;
+        }
+
         /* Additional */
         println!("\n;; ADDITIONAL SECTION:");
 
+        let additional_section = response.additional().unwrap().limit_to::<AllRecordData<_, _>>();
+
+        for record in additional_section {
+            if record.as_ref().unwrap().rtype() != Rtype::Opt {
+                println!("{}", record.unwrap());
+            }
+        }
+
         let opt_record = response.opt().unwrap();
 
-        println!(";; EDNS: version {}; flags: {}; udp: {}", // @TODO remove hardcode UDP
+        println!("\n;; EDNS: version {}; flags: {}; udp: {}", // @TODO remove hardcode UDP
             opt_record.version(), opt_record.dnssec_ok(), opt_record.udp_payload_size()); 
-
 
         for option in opt_record.iter::<AllOptData<_>>() {
             let opt = option.unwrap();
+            println!("!!!! HERE");
             match opt {
                 AllOptData::Nsid(nsid) => println!("; NSID: {}", nsid),
                 AllOptData::Dau(dau) => println!("; DAU: {}", dau),
@@ -240,8 +305,6 @@ impl fmt::Display for BoreError {
 
 fn main() {
     let args = GlobalParamArgs::parse();
-
-    println!("DNAME: {}", args.qname);
 
     let request = match Request::configure(args) {
         Ok(request) => request,
