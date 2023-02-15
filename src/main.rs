@@ -1,11 +1,11 @@
 use std::{fmt, io, process};
 use std::net::{UdpSocket, IpAddr, SocketAddr};
-use clap::{Command, Parser};
+use clap::{Parser};
 use domain::base::{
         Dname, MessageBuilder, Rtype, StaticCompressor, StreamTarget,
-        iana::OptionCode, octets::OctetsBuilder, message::Message,
-        opt::AllOptData
+        message::Message, opt::AllOptData
 };
+// use octseq::builder::OctetsBuilder;
 use domain::rdata::AllRecordData;
 use domain::resolv::stub::conf::ResolvConf;
 
@@ -166,9 +166,13 @@ impl Request {
             opt.set_udp_payload_size(4096);
 
             if self.args.nsid {
-                opt.push_raw_option(OptionCode::Nsid, |target| {
-                    target.append_slice(b" ")
-                })?;
+                opt.nsid(b"")?;
+                // opt.push_raw_option(OptionCode::Nsid, 0, |target| {
+                //     target.append_slice(b" ")
+                // })?;
+                // opt.push_raw_option(OptionCode::Nsid, |target| {
+                //     target.append_slice(b" ")
+                // })?;
             }
 
             if self.args.do_bit {
@@ -257,20 +261,20 @@ impl Request {
         println!("\n;; EDNS: version {}; flags: {}; udp: {}", // @TODO remove hardcode UDP
             opt_record.version(), opt_record.dnssec_ok(), opt_record.udp_payload_size()); 
 
-        for option in opt_record.iter::<AllOptData<_>>() {
+        for option in opt_record.iter::<AllOptData<_, _>>() {
             let opt = option.unwrap();
             match opt {
                 AllOptData::Nsid(nsid) => println!("; NSID: {}", nsid),
-                // AllOptData::Dau(dau) => println!("; DAU: {}", dau),
-                // AllOptData::Dhu(dhu) => println!("; DHU: {}", dhu),
-                // AllOptData::N3u(n3u) => println!("; N3U: {}", n3u),
-                // AllOptData::Expire(expire) => println!("; EXPIRE: {}", expire),
-                // AllOptData::TcpKeepalive(tcpkeepalive) => println!("; TCPKEEPALIVE: {}", tcpkeepalive),
-                // AllOptData::Padding(padding) => println!("; PADDING: {}", padding),
-                // AllOptData::ClientSubnet(clientsubnet) => println!("; CLIENTSUBNET: {}", clientsubnet),
-                // AllOptData::Cookie(cookie) => println!("; COOKIE: {}", cookie),
-                // AllOptData::Chain(chain) => println!("; CHAIN: {}", chain),
-                // AllOptData::KeyTag(keytag) => println!("; KEYTAG: {}", keytag),
+                AllOptData::Dau(dau) => println!("; DAU: {}", dau),
+                AllOptData::Dhu(dhu) => println!("; DHU: {}", dhu),
+                AllOptData::N3u(n3u) => println!("; N3U: {}", n3u),
+                AllOptData::Expire(expire) => println!("; EXPIRE: {}", expire),
+                AllOptData::TcpKeepalive(tcpkeepalive) => println!("; TCPKEEPALIVE: {}", tcpkeepalive),
+                AllOptData::Padding(padding) => println!("; PADDING: {}", padding),
+                AllOptData::ClientSubnet(clientsubnet) => println!("; CLIENTSUBNET: {}", clientsubnet),
+                AllOptData::Cookie(cookie) => println!("; COOKIE: {}", cookie),
+                AllOptData::Chain(chain) => println!("; CHAIN: {}", chain),
+                AllOptData::KeyTag(keytag) => println!("; KEYTAG: {}", keytag),
                 AllOptData::ExtendedError(extendederror) => println!("; EDE: {}", extendederror),
                 _ => println!("NO OPT!"),
             }

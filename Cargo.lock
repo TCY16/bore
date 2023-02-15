@@ -84,15 +84,16 @@ dependencies = [
 
 [[package]]
 name = "domain"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31915e186e897998dce765294497d52e5bc3933f5de4f3bfac5c155f4426a547"
+version = "0.8.0-dev"
+source = "git+https://github.com/NLnetLabs/domain.git?branch=main#32cb3d46646b6e2480bda7828f8a6002b11a0a95"
 dependencies = [
  "bytes",
  "futures",
  "libc",
+ "octseq",
  "rand",
  "smallvec",
+ "time",
  "tokio",
 ]
 
@@ -245,6 +246,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "octseq"
+version = "0.2.0-dev"
+source = "git+https://github.com/NLnetLabs/octseq.git#2de17af6b5791998c627613bf3e8143fc44ba385"
+dependencies = [
+ "bytes",
+ "smallvec",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -347,6 +357,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde"
+version = "1.0.152"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb7d1f0d3021d347a83e556fc4683dea2ea09d87bccdf88ff5c12545d89d5efb"
+
+[[package]]
 name = "slab"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -396,6 +412,22 @@ checksum = "bab24d30b911b2376f3a13cc2cd443142f0c81dda04c118693e35b3835757755"
 dependencies = [
  "winapi-util",
 ]
+
+[[package]]
+name = "time"
+version = "0.3.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a561bf4617eebd33bca6434b988f39ed798e527f51a1e797d0ee4f61c0a38376"
+dependencies = [
+ "serde",
+ "time-core",
+]
+
+[[package]]
+name = "time-core"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e153e1f1acaef8acc537e68b44906d2db6436e2b35ac2c6b42640fff91f00fd"
 
 [[package]]
 name = "tokio"
